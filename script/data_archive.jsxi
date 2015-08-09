@@ -1,0 +1,133 @@
+static partial class Data {
+    public archive = null,
+        stats = null;
+
+    public getArchive (){
+        return archive;
+    }
+
+    public getStats (){
+        return stats;
+    }
+
+    public getArchiveById (id){
+        for (var a in-array archive){
+            if (a.id === id) return a;
+        }
+
+        return null;
+    }
+
+    var statsTimeout;
+    private updateStats(entry){
+        if (!stats){
+            stats = {
+                jobs: 0
+                jobsHand: 0
+                jobsOrder: 0
+                distance: 0.0
+                fuel: 0.0
+                time: 0
+
+                result: 0.0
+                fuelPrice: 0.0
+                tip: 0.0
+                hand: 0.0
+                order: 0.0
+                income: 0.0
+                lost: 0.0
+            };
+        }
+
+        stats.jobs += entry.summary.jobs;
+        stats.jobsHand += entry.summary.jobsHand;
+        stats.jobsOrder += entry.summary.jobsOrder;
+        stats.distance += entry.data.details.distance;
+        stats.fuel += entry.data.details.distance * entry.data.details.consumption / 100;
+        stats.time += entry.data.finished - entry.data.timestamp;
+
+        stats.result += entry.summary.result;
+        stats.fuelPrice += entry.summary.fuelPrice;
+        stats.tip += entry.summary.tip;
+        stats.hand += entry.summary.hand;
+        stats.order += entry.summary.order;
+        stats.income += entry.summary.income;
+        stats.lost += entry.summary.lost;
+
+        clearTimeout(statsTimeout);
+        statsTimeout = setTimeout(lambda {
+            mediator.dispatch('stats', stats);
+        }, 10);
+    }
+
+    private addToArchive (shift){
+        var id = ARCHIVE_PREFIX + Date.now();
+        var json = JSON.stringify(shift);
+
+        localStorage[id] = json;
+        if (archive != null){
+            var summary = getShiftSummary(shift);
+            var entry = { id: id, json: json, data: shift, summary: summary };
+            archive.push(entry);
+            updateStats(entry);
+            mediator.dispatch('archive:add', archive);
+        }
+
+        return summary;
+    }
+
+    public loadArchive (){
+        var initMode = archive == null;
+        if (initMode){
+            archive = [];
+        }
+
+        var loaded = {},
+            jsoned = 0;
+
+        for (var a in-array archive){
+            loaded[a.id] = true;
+        }
+
+        for (var n in-object localStorage){
+            if (n.indexOf(ARCHIVE_PREFIX) !== 0 || n in-object loaded){
+                continue;
+            }
+
+            archive.push({ id: n, json: localStorage[n] });
+            jsoned++;
+        }
+
+        if (jsoned > 0){
+            parseJsoned();
+        } else if (initMode){
+            mediator.dispatch('archive.loading:finish', archive.length, archive.length);
+            mediator.dispatch('archive:load', archive);
+        }
+    }
+
+    public parseJsoned (){
+        mediator.dispatch('archive.loading:start', 0, archive.length);
+        var i = 0;
+        step();
+
+        function step (){
+            var o = archive[i];
+            if (o == null){
+                mediator.dispatch('archive.loading:finish', archive.length, archive.length);
+                mediator.dispatch('archive:load', archive);
+                return;
+            }
+
+            o.data = parseJsonedEntry(o.json);
+            o.summary = getShiftSummary(o.data);
+            updateStats(o);
+            mediator.dispatch('archive.loading:step', ++i, archive.length);
+            setTimeout(step);
+        }
+    }
+
+    public parseJsonedEntry (json){
+        return JSON.parse(json);
+    }
+}

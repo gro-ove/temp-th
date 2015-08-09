@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html style="background:black">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <title>Такси-Помощник</title>
+        <STYLES>
+        <link href='http://fonts.googleapis.com/css?family=Roboto:400,300&subset=latin,cyrillic,cyrillic-ext,latin-ext' rel='stylesheet' type='text/css'>
+        <link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:700,400&subset=latin,cyrillic,cyrillic-ext,latin-ext' rel='stylesheet' type='text/css'>
+        <LIBS>
+        <script>//setTimeout(function (){ location.reload() }, 2e3)</script>
+    </head>
+    <body style="display:none">
+        <div id="ui_tabbar">
+            <span id="ui_tabbar_btn_menu"></span>
+            <a class="ui_tabbar_tab" data-href="#edit">Вождение</a>
+            <a class="ui_tabbar_tab" data-href="#view">Данные</a>
+        </div>
+
+        <div id="ui_menu">
+            <div id="ui_menu_content">
+                <button id="ui_menu_item_login" class="ui_menu_item" disabled>Войти</button>
+                <button id="ui_menu_item_import" class="ui_menu_item" disabled>Импорт данных</button>
+                <button id="ui_menu_item_export" class="ui_menu_item" disabled>Экспорт данных</button>
+                <button id="ui_menu_item_settings" class="ui_menu_item" disabled>Настройки</button>
+                <hr>
+                <button id="ui_menu_item_about" class="ui_menu_item">О программе</button>
+            </div>
+        </div>
+
+        <div id="section_edit" class="div_section">
+            <div id="section_edit_init">
+                <div id="section_edit_init_img"></div>
+                <div class="section_footer">
+                    <p>Нажмите на эту кнопку, чтобы начать новую смену.</p>
+                    <button id="section_edit_start">Начать работу</button>
+                </div>
+            </div>
+            <div id="section_edit_work">
+                <h6 id="section_edit_jobs_number"></h6>
+                <h6 id="section_edit_current_income"></h6>
+                <div id="section_edit_jobs_list_empty">
+                    <p>Нажмите на жёлтую кнопку, чтобы зарегистрировать новый заказ.</p>
+                </div>
+                <div id="section_edit_jobs_list"></div>
+                <button id="section_edit_add_job" class="button_circle important" title="Новый клиент"></button>
+                <div class="section_footer">
+                    <h4 id="section_edit_current_shift"></h4>
+                    <button id="section_edit_details">Уточнить данные</button>
+                    <button id="section_edit_finish" class="finish">Завершить работу</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="section_view" class="div_section">
+            <div id="section_view_loading">
+                <p>Загрузка…</p>
+                <div class="div_progressbar">
+                    <div class="div_progressbar_level" id="section_view_loading_progressbar"></div>
+                </div>
+            </div>
+
+            <div id="section_view_empty">
+                <p>Сохранённых смен нет.</p>
+            </div>
+
+            <div id="section_view_view">
+                <select id="section_view_view_mode">
+                    <option value="shifts_list">Таблица</option>
+                    <option value="stats">Статистика</option>
+                    <option value="charts">Подробнее</option>
+                </select>
+                <h6 id="section_view_shifts_number"></h6>
+                <div id="section_view_shifts_list"></div>
+                <div id="section_view_stats"></div>
+                <div id="section_view_charts">
+                    <canvas id="section_view_chart_result"></canvas>
+                </div>
+            </div>
+
+            <!-- <button id="section_view_export">Экспортировать данные</button> -->
+        </div>
+
+        <SCRIPTS>
+    </body>
+</html>

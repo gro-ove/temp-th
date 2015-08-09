@@ -1,0 +1,36 @@
+/* тупой подход, но, с другой стороны, простой и быстрый */
+
+function o(n){
+    if (typeof n !== 'number'){
+        return n;
+    }
+
+    var temp = n.toFixed(1);
+    if (temp[temp.length - 1] === '0'){
+        return +temp;
+    } else {
+        return temp.slice(0, -2) + ',' + temp[temp.length - 1];
+    }
+}
+
+function d(n){
+    var d = new Date(n).toISOString();
+    return '%0.%1.%2 %3'(
+        d.substr(8, 2),
+        d.substr(5, 2),
+        d.substr(2, 2),
+        d.substr(11, 5)
+    );
+}
+
+function t(n){
+    if (n > 1e12){ // по-моему, такое должно работать нормально
+        var d = new Date(n).toISOString();
+        return d.substr(11, 5);
+    } else {
+        var t = Math.round(n / 60e3);
+        var h = Math.floor(t / 60);
+        var m = t % 60;
+        return '%0:%1'(h < 10 ? '0' + h : h, m < 10 ? '0' + m : m);
+    }
+}

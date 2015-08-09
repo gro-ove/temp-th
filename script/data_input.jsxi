@@ -1,0 +1,10 @@
+static partial class Data {
+    // public getFuelPrice (){
+    //     return localStorage.lastFuelPrice ? +localStorage.lastFuelPrice : 
+    // }
+
+    public guessTip(sum){
+        if (Number.isNaN(+sum)) return 0;
+        return (100 - +sum % 100) % 100;
+    }
+}

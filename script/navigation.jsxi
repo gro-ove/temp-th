@@ -1,0 +1,27 @@
+static class Navigation {
+    public var mediator = new Mediator();
+    public var currentPage, subMode;
+
+    public sub (){
+        location.hash = currentPage + '/sub';
+        setTimeout(lambda subMode = true);
+    }
+
+    handler (){
+        var page = location.hash.indexOf('#view') === 0 ? 'view' : 'edit';
+        if (page !== currentPage){
+            mediator.dispatch('navigate:' + page, page);
+            currentPage = page;
+        } else if (subMode){
+            mediator.dispatch('subback');
+        }
+
+        subMode = false;
+    }
+
+    {
+        window.onhashchange = handler;
+        mediator.extend(Navigation);
+        $(handler);
+    }
+}

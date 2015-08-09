@@ -1,0 +1,24 @@
+/*
+    android < 4.4 не поддерживает calc и даже viewport-units
+    и я не хочу портить вёрстку, зарываясь в адовые css-костыли
+    пусть лучше небольшой класс ресайзит некоторые нужные элементы 
+*/
+
+static class Adaptive {
+    canv(c){
+        c.style.width = (c.width = window.innerWidth - 40) + 'px';
+        c.style.height = (c.height = 240) + 'px';
+    }
+
+    update(){
+        document.getElementById('section_edit_jobs_list').style.height = window.innerHeight - 640 + 385 + 'px';
+        document.getElementById('section_view_shifts_list').style.height = window.innerHeight - 640 + 515 + 'px';
+
+        canv(document.getElementById('section_view_chart_result'));
+    }
+
+    {
+        window.onresize = update;
+        $(update);
+    }
+}

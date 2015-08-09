@@ -1,0 +1,146 @@
+static partial class Data {
+    var ARCHIVE_PREFIX = 'archive_';
+
+    var mediator = new Mediator();
+
+    var data, currentShift;
+
+    {
+        mediator.extend(Data);
+        $(init);
+    }
+
+    private init (){
+        try data = JSON.parse(localStorage.data || null);
+        if (!data || typeof data !== 'object') data = {};
+
+        currentShift = data.currentShift;
+        mediator.dispatch('currentShift:load', currentShift);
+    }
+
+    private save (){
+        data.currentShift = currentShift;
+        localStorage.data = JSON.stringify(data);
+    }
+
+    public startNewShift (){
+        currentShift = {
+            timestamp: Date.now()
+            finished: null
+
+            ready: false
+            details: {
+                distance: null
+                consumption: null
+                fuelPrice: null
+            }
+
+            jobs: []
+        };
+
+        save();
+        mediator.dispatch('currentShift:new', currentShift);
+    }
+
+    public finishShift (){
+        if (!currentShift.ready) return false;
+
+        var shift = currentShift;
+        shift.finished = Date.now();
+        addToArchive(currentShift);
+
+        currentShift = null;
+        save();
+        mediator.dispatch('currentShift:finish', currentShift);
+
+        return shift;
+    }
+
+    public getShiftSummary(shift){
+        var sum = {
+            jobs: 0
+            jobsHand: 0
+            jobsOrder: 0
+
+            fuelPrice: +(shift.details.distance * shift.details.consumption / 100.0 * shift.details.fuelPrice).toFixed(1)
+
+            tip: 0.0
+            lost: 0.0
+            hand: 0.0
+            order: 0.0
+
+            income: 0.0
+            result: 0.0
+            amortization: 0.0
+        };
+
+        for (var j in-array shift.jobs){
+            sum.jobs++;
+            sum.tip += j.tip;
+
+            if (j.percent === 1.0){
+                sum.jobsHand++;
+                sum.hand += j.sum;
+            } else {
+                sum.jobsOrder++;
+                sum.order += j.sum * j.percent;
+                sum.lost = j.sum * (1.0 - j.percent);
+            }
+        }
+
+        sum.income = sum.tip + sum.hand + sum.order;
+        sum.result = sum.income - sum.fuelPrice;
+        sum.amortization = sum.result - sum.fuelPrice;
+
+        return sum;
+    }
+
+    public getCurrentShift (){
+        return currentShift;
+    }
+
+    public addNewJob (job){
+        if (currentShift == null){
+            return false;
+        }
+
+        if (Number.isNaN(job.sum = parseFloat(job.sum)) || job.sum < 0.0 || 
+            Number.isNaN(job.tip = parseFloat(job.tip)) ||
+            Number.isNaN(job.percent = parseFloat(job.percent)) || job.percent < 0.0){
+            return false;
+        }
+
+        job.timestamp = Date.now();
+
+        currentShift.jobs.push(job);
+        save();
+        mediator.dispatch('currentShift.jobs:new', currentShift);
+    }
+
+    public getJobIncome(job){
+        return job.sum * job.percent + job.tip;
+    }
+
+    public updateDetails (details){
+        if (currentShift == null){
+            return false;
+        }
+
+        if (details.distance != null && (Number.isNaN(details.distance = parseFloat(details.distance)) || details.distance < 0.0) || 
+            details.consumption != null && (Number.isNaN(details.consumption = parseFloat(details.consumption)) || details.consumption < 0.0) || 
+            details.fuelPrice != null && (Number.isNaN(details.fuelPrice = parseFloat(details.fuelPrice)) || details.fuelPrice < 0.0)){
+            return false;
+        }
+
+        currentShift.details.distance = details.distance;
+        currentShift.details.consumption = details.consumption;
+        currentShift.details.fuelPrice = details.fuelPrice;
+
+        currentShift.ready = currentShift.details.distance != null &&
+            currentShift.details.consumption != null &&
+            currentShift.details.fuelPrice != null;
+
+        save();
+        mediator.dispatch('currentShift.details:update', currentShift);
+    }
+}

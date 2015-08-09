@@ -1,0 +1,578 @@
+abstract class SectionAbstract {
+    var id;
+    protected node, $node, currentMode;
+
+    (nodeId){
+        id = nodeId;
+        node = document.getElementById(nodeId);
+        $node = $(node);
+        hide();
+    }
+
+    public show (){
+        node.style.display = null;
+    }
+
+    public hide (){
+        node.style.display = 'none';
+    }
+
+    protected click (action, callback){
+        document.getElementById(id + '_' + action).onclick = callback;
+    }
+
+    protected mode (mode){
+        if (mode === currentMode) return;
+
+        currentMode = mode;
+        for (var c in-array node.children){
+            c.style.display = c.id === id + '_' + mode ? null : 'none';
+        }
+    }
+}
+
+class SectionEdit extends SectionAbstract {
+    (){
+        super('section_edit');
+        click('start', startNewShift);
+        click('add_job', addNewJob);
+        click('details', updateDetails);
+        click('finish', finishShift);
+
+        Data.on('currentShift', updateCurrentShift);
+        Data.on('currentShift currentShift.jobs', updateCurrentShiftJobs);
+        Data.on('currentShift currentShift.details', updateCurrentShiftDetails);
+    }
+
+    public addNewJob (){
+        var percents = [ 0.9, 0.8 ];
+        var tryToGuessTip = true;
+
+        var d = new Dialog('Новый клиент', [ `
+            <p>Процент:
+            <select id="new_job_percent">
+                <option value="1.0">С руки</option>
+                %0
+            </select></p>
+
+            <p>Сумма (₽):
+            <input id="new_job_sum" type="number" min="0" step="5" value="400"></input></p>
+
+            <p id="new_job_tip_section">Чаевые (₽):
+            <input id="new_job_tip" type="number" min="0" step="5" value="50"></input></p>
+        `(percents.map(lambda '<option value="%0">%1\%</option>'(arg, 100 * arg))) ], lambda {
+            var sum = d.find('#new_job_sum').val();
+            var tip = d.find('#new_job_tip').val();
+            var percent = d.find('#new_job_percent').val();
+
+            return Data.addNewJob({
+                sum: sum, tip: +percent === 1.0 ? 0.0 : tip, percent: percent
+            });
+        });
+
+        d.find('#new_job_sum').val(localStorage.prevSum || 400).on('change', lambda {
+            var val = parseFloat(this.value);
+            if (!this.value || Number.isNaN(val) || val < 0) return;
+
+            localStorage.prevSum = +val;
+            if (tryToGuessTip){
+                d.find('#new_job_tip').val(Data.guessTip(val));
+            }
+        }).on('keydown', lambda {
+            if (arg.keyCode === 13){
+                d.find('#new_job_tip')[0].select();
+            }
+        })[0].select();
+
+        d.find('#new_job_tip').val(Data.guessTip(localStorage.prevSum || 400)).on('change', lambda {
+            tryToGuessTip = false;
+            localStorage.prevTip = this.value;
+        }).on('keydown', lambda {
+            if (arg.keyCode === 13){
+                d.find('#new_job_percent')[0].focus();
+            }
+        });
+
+        d.find('#new_job_percent').val(localStorage.prevPercent || percents[0]).on('change', lambda {
+            if (+this.value < 1.0){
+                localStorage.prevPercent = this.value;
+            }
+
+            d.find('#new_job_tip_section').toggle(+this.value < 1.0);
+        });
+    }
+
+    public startNewShift (){
+        Data.startNewShift();
+        show();
+    }
+
+    public updateDetails (){
+        var currentShift = Data.getCurrentShift();
+        if (currentShift == null) return;
+
+        var d = new Dialog('Детали смены', [
+            'Общий пробег (км):'
+            '<input id="details_distance" type="number" min="0" step="1"></input>'
+
+            'Расход топлива (л/100 км):'
+            '<input id="details_consumption" type="number" min="0" step="0.1"></input>'
+
+            'Цена топлива (₽/л):'
+            '<input id="details_fuelPrice" type="number" min="0" step="0.1"></input>'
+        ], lambda {
+            var distance = d.find('#details_distance').val() || null;
+            var consumption = d.find('#details_consumption').val() || null;
+            var fuelPrice = d.find('#details_fuelPrice').val() || null;
+
+            return Data.updateDetails({
+                distance: distance, consumption: consumption, fuelPrice: fuelPrice
+            });
+        });
+
+        d.find('#details_distance').val(o(currentShift.details.distance || '')).on('keydown', lambda {
+            if (arg.keyCode === 13){
+                d.find('#details_consumption')[0].select();
+            }
+        })[0].select();
+
+        d.find('#details_consumption').val(o(currentShift.details.consumption || localStorage.lastConsumption || '')).on('change', lambda {
+            localStorage.lastConsumption = this.value;
+        }).on('keydown', lambda {
+            if (arg.keyCode === 13){
+                d.find('#details_fuelPrice')[0].select();
+            }
+        });
+
+        d.find('#details_fuelPrice').val(o(currentShift.details.fuelPrice || localStorage.lastFuelPrice || '')).on('change', lambda {
+            localStorage.lastFuelPrice = this.value;
+        }).on('keydown', lambda {
+            if (arg.keyCode === 13){
+                d.find('[data-id="dialog-ok"]')[0].click();
+            }
+        });
+    }
+
+    public finishShift (){
+        var currentShift = Data.getCurrentShift();
+        if (currentShift == null) return;
+
+        function step1 (){
+            var d = new Dialog('Завершить смену', [
+                'Вы уверены?'
+            ], lambda {
+                if (currentShift.jobs.length === 0){
+                    step2();
+                } else {
+                    step3();
+                }
+            }).setButton('Да');
+            d.find('[data-id="dialog-ok"]').addClass('finish');
+        }
+
+        function step2 (){
+
+            step3(); // TODO?
+        }
+
+        function step3 (){
+            var shift = Data.finishShift();
+            if (!shift) return;
+
+            var summary = Data.getShiftSummary(shift);
+
+            new Dialog('Конец смены', [
+                '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Заказы:</div>'(o(summary.order))
+                '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Чаевые:</div>'(o(summary.tip))
+                '<div class="div_sum_entry div_sum_entry_money" data-value="%0">С руки:</div>'(o(summary.hand))
+                '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Топливо:</div>'(o(-summary.fuelPrice))
+                '<hr>'
+                '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Итого:</div>'(o(summary.result))
+            ]);
+        }
+
+        step1();
+    }
+
+    public updateCurrentShift (currentShift){
+        if (currentShift == null){
+            mode('init');
+            return;
+        }
+
+        mode('work');
+        $node.find('#section_edit_current_shift').text('Работа начата в %0'(t(currentShift.timestamp)));
+    }
+
+    public updateCurrentShiftJobs (currentShift){
+        if (currentShift == null) return;
+
+        var l = currentShift.jobs.length;
+        var i = currentShift.jobs.reduce(lambda (a, b) a + Data.getJobIncome(b), 0);
+        $node.find('#section_edit_jobs_number').toggle(l > 0).text(
+            'Выполнен%2 %0 заказ%1,'(l.toLongString(), l.postfix('', 'а', 'ов'), l.postfix('', 'о', 'о')) +
+            ' заработан%2 %0 рубл%1'(o(i), i.postfix('ь', 'я', 'ей'), i.postfix('', 'о', 'о')));
+
+        $node.find('#section_edit_jobs_list_empty').toggle(l === 0);
+
+        $node.find('#section_edit_jobs_list').html(
+            currentShift.jobs.map(lambda `<div class="section_edit_job_entry"><p>%0</p><p class="p_small">%1</p></div>`(
+                'Сумма: %0 ₽, %1%2'(o(arg.sum), arg.tip > 0 ? 'чаевые: %0 ₽, '(o(arg.tip)) : '', arg.percent === 1 ? 'с руки' : o(arg.percent * 100) + '%')
+                t(arg.timestamp)
+            )).join('')
+        );
+    }
+
+    public updateCurrentShiftDetails(currentShift){
+        if (currentShift == null) return;
+
+        $node.find('#section_edit_finish').toggle(currentShift.ready);
+        $node.find('#section_edit_details, #section_edit_finish').toggleClass('halfwidth', currentShift.ready);
+    }
+}
+
+class SectionView extends SectionAbstract {
+    (){
+        super('section_view');
+
+        mode('loading');
+        Data.on('archive.loading:start', lambda mode('loading'));
+        Data.on('archive.loading:finish', lambda mode(Data.getArchive().length === 0 ? 'empty' : 'view'));
+        Data.on('archive.loading', onLoading);
+
+        Data.on('archive', updateTable);
+        Data.on('stats', updateStats);
+
+        click('shifts_list', shiftListClick);
+
+        $node.find('#section_view_stats, #section_view_charts').hide();
+        $node.find('#section_view_view_mode').change(lambda {
+            $node.find('#section_view_shifts_list, #section_view_stats, #section_view_charts').hide();
+            $node.find('#section_view_%0'(this.value)).show();
+
+            if (this.value === 'charts'){
+                updateCharts();
+            }
+        });
+    }
+
+    private onLoading (pos, max){
+        node.querySelector('#section_view_loading_progressbar').style.width = 100 * pos / max + '%';
+    }
+
+    private updateTable (archive){
+        var l = archive.length;
+        mode(l === 0 ? 'empty' : 'view');
+
+        $node.find('#section_view_shifts_number').toggle(l > 0).text(
+            'Завершен%2 %0 смен%1'(l.toLongString(2), l.postfix('а', 'ы', ''), l.postfix('а', 'о', 'о')));
+        var m = $node.find('#section_view_view_mode').toggle(l > 1);
+        if (l < 2 && m.val() !== 'shifts_list'){
+            m.val('shifts_list');
+            $node.find('#section_view_stats, #section_view_charts').hide();
+            $node.find('#section_view_shifts_list').show();
+        }
+
+        node.querySelector('#section_view_shifts_list').innerHTML = archive.map(lambda {
+            var l = arg.data.jobs.length,
+                e = arg.summary.result;
+            return '<div data-id="%0" class="section_view_shift_entry"><p>%1</p><p class="p_small">%2</p></div>'(
+                arg.id,
+                '%0 заказ%1, %2 рубл%3'(o(l), l.postfix('', 'а', 'ов'), o(e), e.postfix('ь', 'я', 'ей')),
+                d(arg.data.timestamp)
+            );
+        }).join('');
+    }
+
+    private updateStats (stats){
+        function t(n){
+            var t = Math.round(n / 60e3);
+            var m = t % 60;
+            var s = '%0 минут%1'(m, m.postfix('а', 'ы', ''));
+
+            var h = Math.floor((t / 60) % 24);
+            if (h === 0) return s;
+            s = '%0 час%1 %2'(h, h.postfix('', 'а', 'ов'), s);
+
+            var d = Math.floor(t / 60 / 60);
+            if (d === 0) return s;
+            s = '%0 д%1 %2'(d, d.postfix('ень', 'ня', 'ней'), s);
+
+            return s;
+        }
+
+        node.querySelector('#section_view_stats').innerHTML = `
+            %0
+            <h6>Финансы</h6>
+            %1
+            <h6>Усреднённое</h6>
+            %2
+        `(
+            '<div class="div_sum_entry" data-value="%0">Заказов выполнено:</div>'(o(stats.jobs))
+          + '<div class="div_sum_entry" data-value="%0 (%1\%)">Из них с руки:</div>'(o(stats.jobsHand), o(100 * stats.jobsHand / stats.jobs))
+          + '<div class="div_sum_entry" data-value="%0 км">Пройдено:</div>'(o(stats.distance))
+          + '<div class="div_sum_entry" data-value="%0 л">Топлива потрачено:</div>'(o(stats.fuel))
+          + '<div class="div_sum_entry" data-value="%0">Общее время:</div>'(t(stats.time)),
+
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">На заказах:</div>'(o(stats.order))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Не считая отданных сервисам:</div>'(o(-stats.lost))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">С руки:</div>'(o(stats.hand))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Чаевые:</div>'(o(stats.tip))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Итого доход:</div>'(o(stats.income))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">На топливо ушло:</div>'(o(-stats.fuelPrice))
+          + '<div class="div_sum_entry div_sum_entry_money" data-value="%0">В результате:</div>'(o(stats.result)),
+
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Размер чаевых:</div>'(o(stats.tip / stats.jobsOrder))
+          + '<div class="div_sum_entry" data-value="%0 км/ч">Скорость:</div>'(o(stats.distance / stats.time * 3600e3))
+          + '<div class="div_sum_entry" data-value="%0 л/100 км">Расход топлива:</div>'(o(stats.fuel / stats.distance * 100))
+
+        );
+    }
+
+    private updateCharts (){
+        var archive = Data.getArchive();
+        if (!archive) return;
+
+        $('.line-legend').remove();
+
+        Chart.defaults.global = {
+            showScale: true, // if we should show the scale at all
+            scaleOverride: false, // if we want to override with a hard coded scale
+            scaleSteps: null, // the number of steps in a hard coded scale ** Required if scaleOverride is true **
+
+            scaleStepWidth: null, // the value jump in the hard coded scale
+            scaleStartValue: null, // the scale starting value
+
+            scaleLineColor: 'rgba(0,0,0,.1)', // colour of the scale line
+            scaleLineWidth: 1, // pixel width of the scale line
+            scaleShowLabels: true, // whether to show labels on the scale
+
+            scaleLabel: '<%=value%>', // interpolated JS string - can access value
+            scaleIntegersOnly: true, // whether the scale should stick to integers, not floats even if drawing space is there
+            scaleBeginAtZero: false, // whether the scale should start at zero, or an order of magnitude down from the lowest value
+
+            scaleFontFamily: 'Roboto, sans-serif', // scale label font declaration for the scale label
+            scaleFontSize: 12, // scale label font size in pixels
+            scaleFontStyle: 'normal', // scale label font weight style
+            scaleFontColor: '#666', // scale label font colour
+
+            responsive: true, // whether or not the chart should be responsive and resize when the browser does.
+            maintainAspectRatio: true, // whether to maintain the starting aspect ratio or not when responsive, if set to false, will take up entire container
+
+            showTooltips: true, // determines whether to draw tooltips on the canvas or not
+            customTooltips: false, // determines whether to execute the customTooltips function instead of drawing the built in tooltips (See [Advanced - External Tooltips](#advanced-usage-custom-tooltips))
+            tooltipEvents: [ 'mousemove', 'touchstart', 'touchmove' ], // array of string names to attach tooltip events
+            tooltipFillColor: 'rgba(0,0,0,0.8)', // tooltip background colour
+            tooltipFontFamily: 'Roboto, sans-serif', // tooltip label font declaration for the scale label
+            tooltipFontSize: 14, // tooltip label font size in pixels
+            tooltipFontStyle: 'normal', // tooltip font weight style
+            tooltipFontColor: '#fff', // tooltip label font colour
+            tooltipTitleFontFamily: 'Roboto, sans-serif', // tooltip title font declaration for the scale label
+            tooltipTitleFontSize: 14, // tooltip title font size in pixels
+            tooltipTitleFontStyle: 'bold', // tooltip title font weight style
+            tooltipTitleFontColor: '#fff', // tooltip title font colour
+            tooltipYPadding: 6, // pixel width of padding around tooltip text
+            tooltipXPadding: 6, // pixel width of padding around tooltip text
+            tooltipCaretSize: 8, // size of the caret on the tooltip
+            tooltipCornerRadius: 2, // pixel radius of the tooltip border
+            tooltipXOffset: 10, // pixel offset from point x to tooltip edge
+            tooltipTemplate: '<%if (label){%><%=label%>: <%}%><%= value %>', // template string for single tooltips
+            multiTooltipTemplate: '<%= value %>', // template string for multiple tooltips
+        };
+
+        var ctx = document.getElementById('section_view_chart_result').getContext("2d");
+        var chart = new Chart(ctx).Line({
+            labels: archive.map(lambda d(arg.data.timestamp)),
+            datasets: [
+                {
+                    label: 'Всего',
+                    fillColor: "rgba(60,220,60,0.2)",
+                    strokeColor: "rgba(60,220,60,1)",
+                    pointColor: "rgba(60,220,60,1)",
+                    pointStrokeColor: "#fff",
+                    pointHighlightFill: "#fff",
+                    pointHighlightStroke: "rgba(220,220,220,1)",
+                    data: archive.map(lambda +arg.summary.result.toFixed(2))
+                }, {
+                    label: 'С руки',
+                    fillColor: "rgba(220,220,60,0.2)",
+                    strokeColor: "rgba(220,220,60,1)",
+                    pointColor: "rgba(220,220,60,1)",
+                    pointStrokeColor: "#fff",
+                    pointHighlightFill: "#fff",
+                    pointHighlightStroke: "rgba(220,220,220,1)",
+                    data: archive.map(lambda +arg.summary.hand.toFixed(2))
+                }, {
+                    label: 'Чаевые',
+                    fillColor: "rgba(220,220,220,0.2)",
+                    strokeColor: "rgba(220,220,220,1)",
+                    pointColor: "rgba(220,220,220,1)",
+                    pointStrokeColor: "#fff",
+                    pointHighlightFill: "#fff",
+                    pointHighlightStroke: "rgba(220,220,220,1)",
+                    data: archive.map(lambda +arg.summary.tip.toFixed(2))
+                }, {
+                    label: 'Топливо',
+                    fillColor: "rgba(220,60,60,0.2)",
+                    strokeColor: "rgba(220,60,60,1)",
+                    pointColor: "rgba(220,60,60,1)",
+                    pointStrokeColor: "#fff",
+                    pointHighlightFill: "#fff",
+                    pointHighlightStroke: "rgba(220,220,220,1)",
+                    data: archive.map(lambda +arg.summary.fuelPrice.toFixed(2))
+                }
+            ]
+        }, {
+            scaleShowXLabels: false
+            scaleBeginAtZero: true
+            bezierCurveTension: 0.2
+        });
+
+        $(chart.generateLegend()).insertAfter(document.getElementById('section_view_chart_result'));
+    }
+
+    private shiftListClick (arg){
+        var entry = $(arg.target).closest('.section_view_shift_entry');
+        if (!entry[0]) return;
+
+        var shift = Data.getArchiveById(entry.data('id'));
+        if (!shift) return;
+
+        new Dialog('Смена', [
+            '<div class="div_sum_entry" data-value="%0">Начало:</div>'(d(shift.data.timestamp))
+            '<div class="div_sum_entry" data-value="%0">Завершение:</div>'(d(shift.data.finished))
+            '<div class="div_sum_entry" data-value="%0">Длительность:</div>'(t(shift.data.finished - shift.data.timestamp))
+            '<div class="div_sum_entry" data-value="%0">Выполнено заказов:</div>'(o(shift.data.jobs.length))
+
+            '<hr>'
+
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Заказы:</div>'(o(shift.summary.order))
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Чаевые:</div>'(o(shift.summary.tip))
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">С руки:</div>'(o(shift.summary.hand))
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Топливо:</div>'(o(-shift.summary.fuelPrice))
+            '<hr>'
+            '<div class="div_sum_entry div_sum_entry_money" data-value="%0">Итого:</div>'(o(shift.summary.result))
+        ]);
+    }
+
+    public show (){
+        super();
+        Data.loadArchive();
+    }
+}
+
+static class App {
+    public NAME = 'Такси-Помощник';
+    public VERSION = @macro :string () { 
+        var v = ('' + fs.readFileSync('version')).replace(/\d+$/, lambda +arg + 1);
+        return fs.writeFileSync('version', v), v;
+    } ();
+
+    var sEdit, sView;
+
+    navigate (page){
+        switch (page){
+            case 'edit':
+                sEdit.show();
+                sView.hide();
+                break;
+
+            case 'view':
+                sEdit.hide();
+                sView.show();
+                break;
+        }
+    }
+
+    {
+        sEdit = new SectionEdit();
+        sView = new SectionView();
+
+        Navigation.on('navigate', navigate);
+
+        $(lambda {
+            document.body.style.display = null;
+
+            setTimeout(lambda {
+                scrollTo(0, 1);
+            }, 50);
+        });
+    }
+}
+
+class Menu {
+    var node, $node, showed;
+
+    (){
+        node = document.getElementById('ui_menu');
+        $node = $(node);
+
+        $node.on('click', lambda {
+            if (arg.target.id === 'ui_menu'){
+                hide();
+            }
+        });
+
+        $node.find('button').on('click', lambda {
+            switch (arg.target.id){
+                case 'ui_menu_item_about':
+                    clickAbout();
+                    break;
+            }
+
+            hide();
+        });
+    }
+
+    private clickAbout (){
+        new Dialog(App.NAME, [
+            '<div class="div_sum_entry" data-value="%0">Версия:</div>'(App.VERSION)
+        ]);
+    }
+
+    public show (){
+        if (showed) return;
+        $node.addClass('ui_menu_active');
+        showed = true;
+
+        Navigation.sub();
+        Navigation.on('subback', hide);
+    }
+
+    public hide (){
+        if (!showed) return;
+        $node.removeClass('ui_menu_active');
+        showed = false;
+
+        Navigation.off('subback', hide);
+    }
+
+    public toggle (){
+        if (showed) hide(); else show();
+    }
+}
+
+static class Tabs {
+    var $node, menu;
+
+    update (page){
+        $node.find('.ui_tabbar_tab_active').removeClass('ui_tabbar_tab_active');
+        $node.find('[data-href="#%0"]'(page)).addClass('ui_tabbar_tab_active');
+    }
+
+    {
+        $node = $(document.getElementById('ui_tabbar'));
+        $node.find('a').on('click', lambda {
+            location.replace(this.getAttribute('data-href'));
+            return false;
+        });
+
+        menu = new Menu();
+        $node.find('#ui_tabbar_btn_menu').on('click', lambda {
+            menu.toggle();
+        });
+
+        Navigation.on('navigate', update);
+    }
+}
+

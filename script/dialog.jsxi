@@ -1,0 +1,100 @@
+class Dialog {
+    public el, $el;
+    public header, content, buttons;
+
+    private _okButton;
+    private _callback, _closeCallback, _endCallback;
+    private _closeOnEnter = true;
+
+    (title, elements, callback, closeCallback) {
+        el = document.createElement('div');
+        el.className = 'dialog_wrapper';
+        el.innerHTML = `<div class="dialog_vertical_align"><div class="dialog_inner">
+            <div class="dialog_header"><h5>%0</h5></div>
+            <div class="dialog_content"></div>
+            <div class="dialog_buttons">
+                <button data-id="dialog-ok">ОК</button>
+            </div></div></div>`(title);
+
+        $el = $(el).click(function (e){
+            if (e.target.className === 'dialog_vertical_align' && (_closeCallback == null || 
+                    _closeCallback !== false && _closeCallback(e) !== false)){
+                close();
+            }
+        }).appendTo('body');
+
+        header = el.querySelector('.dialog_header');
+        content = el.querySelector('.dialog_content');
+        buttons = el.querySelector('.dialog_buttons');
+
+        setContent(elements);
+
+        _callback = callback && callback.bind(this);
+        _closeCallback = closeCallback && closeCallback.bind(this);
+
+        _okButton = buttons.querySelector('[data-id="dialog-ok"]');
+        if (_callback === false){
+            _okButton.style.display = 'none';
+        }
+
+        $(_okButton).click(function (e){
+            if (!_callback || _callback(e) !== false){
+                close();
+            }
+        });
+
+        Navigation.sub();
+        Navigation.on('subback', close);
+    }
+
+    public setContent(elements){
+        if (!Array.isArray(elements)){
+            elements = [ elements ];
+        }
+
+        var html = '';
+        for (var element in-array elements){
+            if (element == null || element === '') continue;
+            html += typeof element === 'string' && element[0] !== '<' && element[element.length - 1] !== '>' ? '<p>%0</p>'(element) : element;
+        }
+        
+        content.innerHTML = html;
+        return this;
+    }
+
+    public closeOnEnter(v){
+        _closeOnEnter = v;
+        return this;
+    }
+
+    public onEnd(callback){
+        _endCallback = callback.bind(this);
+        return this;
+    }
+
+    public setButton(a, c){
+        $(_okButton).toggle(a != null).text(a);
+        if (c != null){ _callback = c; }
+        return this;
+    }
+
+    public addButton(text, fn){
+        fn = fn && fn.bind(this);
+        $(document.createElement('button')).text(text).appendTo(buttons).click(function (e){
+            if (!fn || fn(e) !== false){
+                close();
+            }
+        });
+        return this;
+    }
+
+    public find(a){
+        return $el.find(a);
+    }
+
+    public close(){
+        if (_endCallback) _endCallback();
+        Navigation.off('subback', close);
+        $el.remove();
+    }
+}
